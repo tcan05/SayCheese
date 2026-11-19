@@ -1,41 +1,6 @@
 # SayCheese
 
-A production-grade, ultra-fast, zero-dependency Windows 10/11 screenshot capture and annotation desktop application written in modern **C++20** (~1 MB standalone portable `.exe`), engineered specifically to eliminate OS/DWM freezes, input queue lockups, idle GPU footprint, and resource leaks.
-
-## Why SayCheese?
-
-- **Zero Input Lockups:** Never installs `WH_KEYBOARD_LL` or `WH_MOUSE_LL` hooks. Uses OS-managed `RegisterHotKey` (`PrintScreen`, with automatic `Ctrl+Shift+S` fallback + System Tray balloon if Windows 11 Snipping Tool owns `PrintScreen`).
-- **Non-Blocking Multi-Monitor Capture:** Uses per-adapter DXGI Desktop Duplication (`IDXGIOutput5::DuplicateOutput1` / `IDXGIOutput1::DuplicateOutput`) with strict `<= 100 ms` frame timeouts, bounded retries, HDR (`R16G16B16A16_FLOAT` scRGB) and 10-bit (`R10G10B10A2_UNORM`) surface conversion, monitor rotation support, and automatic `BitBlt` fallback for RDP/basic adapters.
-- **Zero Idle GPU Footprint:** Fully ephemeral per-capture GPU/overlay lifecycle. While sitting in the System Tray, SayCheese holds **0 MB VRAM** and **zero live D3D11/DXGI/Direct2D objects**.
-- **Per-Monitor DPI v2 Accuracy:** Embeds a `PerMonitorV2` manifest, locks the capture canvas 1:1 to physical pixels across mixed-DPI multi-monitor layouts (including negative virtual coordinates), and scales floating Direct2D toolbars dynamically per monitor via `GetDpiForMonitor`.
-- **WYSIWYG Export Guarantee:** Live preview and offscreen clipboard/file export share the exact same Direct2D 1.1 `SceneRenderer` (`ID2D1DeviceContext` -> offscreen `ID2D1Bitmap1` -> `IWICBitmap`), ensuring pixel-identical output for Pen, Highlighter opacity, DirectWrite Text, Mosaic Pixelate, and `CLSID_D2D1GaussianBlur`.
-- **Zero External Dependencies:** Pure Win32 + DXGI + Direct2D 1.1 + DirectWrite + WIC, statically linked (`/MT`) with no VC++ Redistributable required.
-
----
-
-## Architecture Overview
-
-```text
-System Tray (Idle: 0 GPU/COM objects)
-   │  PrintScreen / Ctrl+Shift+S / Tray Menu
-   ▼
-ScreenCapture (capture/)
-   ├─ Per-adapter DXGI Desktop Duplication (<=100ms timeout, HDR/10-bit, rotation)
-   └─ Automatic per-output or global BitBlt fallback
-   │  Releases all duplication interfaces immediately
-   ▼
-Ephemeral OverlayWindow (ui/ + render/ + tools/)
-   ├─ D2DContext (D3D11 + Flip-Model SwapChain + ID2D1DeviceContext @ 96 DPI)
-   ├─ SceneRenderer (shared WYSIWYG renderer: desktop + all 7 tools + Mosaic/GaussianBlur)
-   ├─ UIRenderer (darkened backdrop, 8 handles, W×H badge, monitor-clamped toolbars)
-   └─ ToolController + CommandStack (append-only Undo/Redo)
-   │
-   ├── Ctrl+C ──► RenderCropToWicBitmap ─► CF_DIBV5 + CF_DIB Clipboard ─► Instant Teardown
-   ├── Ctrl+S ──► RenderCropToWicBitmap ─► WIC PNG / JPEG Save Dialog  ─► Instant Teardown
-   └── ESC / Right-Click Outside ───────────────────────────────────────► Instant Teardown
-```
-
----
+Ultra-fast, zero-dependency Windows 10/11 screenshot capture and annotation desktop application tool.
 
 ## Annotation Tools & Keyboard Shortcuts
 
