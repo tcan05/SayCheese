@@ -16,6 +16,8 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 add_library(saycheese_core STATIC
     src/platform/dpi_monitor.cpp
     src/platform/com_debug.cpp
+    src/tools/geometry.cpp
+    src/ui/toolbar_layout.cpp
 )
 
 target_include_directories(saycheese_core PUBLIC
@@ -72,3 +74,4 @@ function(saycheese_add_unit_test target_name source_file)
 endfunction()
 
 saycheese_add_unit_test(test_platform tests/test_platform.cpp)
+saycheese_add_unit_test(test_geometry tests/test_geometry.cpp)
