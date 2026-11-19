@@ -20,6 +20,9 @@ add_library(saycheese_core STATIC
     src/capture/gdi_capture.cpp
     src/capture/dxgi_capture.cpp
     src/capture/screen_capture.cpp
+    src/render/d2d_context.cpp
+    src/render/scene_renderer.cpp
+    src/render/ui_renderer.cpp
     src/tools/geometry.cpp
     src/tools/command_stack.cpp
     src/tools/tool_controller.cpp
