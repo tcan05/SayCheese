@@ -29,6 +29,10 @@ add_library(saycheese_core STATIC
     src/tools/command_stack.cpp
     src/tools/tool_controller.cpp
     src/ui/toolbar_layout.cpp
+    src/ui/overlay_window.cpp
+    src/app/hotkey_manager.cpp
+    src/app/tray_icon.cpp
+    src/app/app_controller.cpp
 )
 
 target_include_directories(saycheese_core PUBLIC
@@ -74,6 +78,16 @@ target_link_libraries(saycheese_core PUBLIC
     shcore
     psapi
 )
+
+add_executable(SayCheese WIN32
+    src/main.cpp
+    resources/app.rc
+)
+target_link_libraries(SayCheese PRIVATE saycheese_core)
+if(MSVC)
+    # app.rc embeds resources/app.manifest (PerMonitorV2 + Common Controls v6) directly.
+    target_link_options(SayCheese PRIVATE /MANIFEST:NO)
+endif()
 
 enable_testing()
 
