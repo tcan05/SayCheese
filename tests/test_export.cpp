@@ -202,6 +202,57 @@ SC_TEST("Headless WARP WYSIWYG offscreen render exports PNG/JPEG cleanly with ze
     }
 }
 
+SC_TEST("GaussianBlur and Mosaic censors visibly modify their exact non-zero-origin target rectangle") {
+    ComInitScope comScope;
+    SC_EXPECT_TRUE(comScope.Succeeded());
+
+    // Build a high-contrast 2x2 black/white checkerboard so both Blur and Mosaic must alter pixels.
+    CapturedFrame frame{};
+    frame.width = 200;
+    frame.height = 200;
+    frame.stride = 200 * 4;
+    frame.backend = CaptureBackend::Synthetic;
+    frame.bgraPixels.resize(static_cast<size_t>(frame.stride) * 200u);
+    for (int y = 0; y < 200; ++y) {
+        for (int x = 0; x < 200; ++x) {
+            const uint8_t v = (((x / 4) + (y / 4)) & 1) ? 255 : 0;
+            const size_t i = static_cast<size_t>(y * frame.stride + x * 4);
+            frame.bgraPixels[i + 0] = v;
+            frame.bgraPixels[i + 1] = v;
+            frame.bgraPixels[i + 2] = v;
+            frame.bgraPixels[i + 3] = 255;
+        }
+    }
+
+    D2DContext ctx;
+    SC_EXPECT_TRUE(ctx.InitializeHeadless(true));
+    SC_EXPECT_TRUE(ctx.UploadDesktopBitmap(frame));
+    SceneRenderer renderer;
+
+    const RectF crop{0.0f, 0.0f, 200.0f, 200.0f};
+    Annotation blur{};
+    blur.id = 10;
+    blur.type = ToolType::Censor;
+    blur.censorMode = CensorMode::GaussianBlur;
+    blur.censorIntensity = 8.0f;
+    blur.rect = {80.0f, 70.0f, 160.0f, 150.0f}; // Non-zero origin!
+
+    const ExportedImage out = RenderCropToWicBitmap(ctx, renderer, frame, crop, {blur});
+    SC_EXPECT_TRUE(out.IsValid());
+
+    // Center of blur box (120, 110) must be blurred to mid-gray (~127), NOT pure 0 or 255!
+    const size_t centerIdx = static_cast<size_t>(110 * out.stride + 120 * 4);
+    const uint8_t blurredLuma = out.bgraPixels[centerIdx];
+    SC_EXPECT_TRUE(blurredLuma > 60 && blurredLuma < 195);
+
+    // Pixel outside blur box (20, 20) must remain untouched pure 0 or 255.
+    const size_t outIdx = static_cast<size_t>(20 * out.stride + 20 * 4);
+    SC_EXPECT_TRUE(out.bgraPixels[outIdx] == 0 || out.bgraPixels[outIdx] == 255);
+
+    renderer.ClearCache();
+    ctx.Reset();
+}
+
 int main() {
     return saycheese::test::RunAll("export");
 }

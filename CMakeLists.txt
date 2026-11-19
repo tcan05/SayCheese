@@ -33,6 +33,7 @@ add_library(saycheese_core STATIC
     src/app/hotkey_manager.cpp
     src/app/tray_icon.cpp
     src/app/app_controller.cpp
+    src/app/leak_self_test.cpp
 )
 
 target_include_directories(saycheese_core PUBLIC
@@ -104,3 +105,4 @@ saycheese_add_unit_test(test_command_stack tests/test_command_stack.cpp)
 saycheese_add_unit_test(test_tool_controller tests/test_tool_controller.cpp)
 saycheese_add_unit_test(test_capture_conversion tests/test_capture_conversion.cpp)
 saycheese_add_unit_test(test_export tests/test_export.cpp)
+saycheese_add_unit_test(test_leak_stress tests/test_leak_stress.cpp)

@@ -1,6 +1,7 @@
 #include "render/d2d_context.hpp"
 
 #include <d2d1_1helper.h>
+#include <dxgi1_3.h>
 
 namespace saycheese::render {
 
@@ -223,17 +224,26 @@ HRESULT D2DContext::Present() {
 }
 
 void D2DContext::Reset() noexcept {
-    desktopBitmap_.Reset();
-    swapTargetBitmap_.Reset();
     if (d2dContext_) {
         d2dContext_->SetTarget(nullptr);
     }
-    d2dContext_.Reset();
-    d2dDevice_.Reset();
+    desktopBitmap_.Reset();
+    swapTargetBitmap_.Reset();
     swapChain_.Reset();
+    d2dContext_.Reset();
+    if (d2dDevice_) {
+        d2dDevice_->ClearResources(0);
+    }
+    d2dDevice_.Reset();
     if (d3dContext_) {
         d3dContext_->ClearState();
         d3dContext_->Flush();
+    }
+    if (d3dDevice_) {
+        ComPtr<IDXGIDevice3> dxgiDev3;
+        if (SUCCEEDED(d3dDevice_.As(&dxgiDev3)) && dxgiDev3) {
+            dxgiDev3->Trim();
+        }
     }
     d3dContext_.Reset();
     d3dDevice_.Reset();

@@ -362,10 +362,14 @@ DxgiCaptureSummary CaptureMonitorsDxgi(CapturedFrame& dstFrame) {
             }
         }
 
-        // Ensure deterministic immediate release of all capture GPU resources.
+        // Ensure deterministic immediate release of all capture GPU resources and driver caches.
         attachedOutputs.clear();
         context->ClearState();
         context->Flush();
+        ComPtr<IDXGIDevice3> dxgiDev3;
+        if (SUCCEEDED(device.As(&dxgiDev3)) && dxgiDev3) {
+            dxgiDev3->Trim();
+        }
         context.Reset();
         device.Reset();
     }

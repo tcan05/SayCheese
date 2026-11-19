@@ -71,6 +71,7 @@ void DrawButtonIcon(
     tools::RectF r,
     float scale,
     ID2D1Brush* fgBrush,
+    ID2D1SolidColorBrush* scratchBrush,
     const UIRenderState& state) {
     const float cx = 0.5f * (r.left + r.right);
     const float cy = 0.5f * (r.top + r.bottom);
@@ -101,9 +102,9 @@ void DrawButtonIcon(
         break;
 
     case ui::ToolbarButtonId::ToolHighlighter: {
-        ComPtr<ID2D1SolidColorBrush> glow;
-        if (SUCCEEDED(dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.85f, 0.15f, 0.55f), &glow)) && glow) {
-            dc->FillRectangle(D2D1::RectF(cx - s, cy + s * 0.15f, cx + s, cy + s * 0.85f), glow.Get());
+        if (scratchBrush != nullptr) {
+            scratchBrush->SetColor(D2D1::ColorF(1.0f, 0.85f, 0.15f, 0.55f));
+            dc->FillRectangle(D2D1::RectF(cx - s, cy + s * 0.15f, cx + s, cy + s * 0.85f), scratchBrush);
         }
         dc->DrawLine(D2D1::Point2F(cx - s * 0.7f, cy + s * 0.35f),
                      D2D1::Point2F(cx + s * 0.65f, cy - s * 0.85f), fgBrush, stroke * 1.6f);
@@ -145,9 +146,9 @@ void DrawButtonIcon(
         break;
     }
     case ui::ToolbarButtonId::ColorPicker: {
-        ComPtr<ID2D1SolidColorBrush> swatch;
-        if (SUCCEEDED(dc->CreateSolidColorBrush(ToD2DColor(state.activeColor), &swatch)) && swatch) {
-            dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), s * 0.95f, s * 0.95f), swatch.Get());
+        if (scratchBrush != nullptr) {
+            scratchBrush->SetColor(ToD2DColor(state.activeColor));
+            dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), s * 0.95f, s * 0.95f), scratchBrush);
         }
         dc->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), s * 0.95f, s * 0.95f), fgBrush, 1.4f * scale);
         break;
@@ -183,10 +184,9 @@ void DrawButtonIcon(
     case ui::ToolbarButtonId::ColorSwatch4:
     case ui::ToolbarButtonId::ColorSwatch5: {
         const size_t idx = static_cast<size_t>(id) - static_cast<size_t>(ui::ToolbarButtonId::ColorSwatch0);
-        ComPtr<ID2D1SolidColorBrush> sw;
-        if (idx < tools::kQuickPalette.size() &&
-            SUCCEEDED(dc->CreateSolidColorBrush(ToD2DColor(tools::kQuickPalette[idx]), &sw)) && sw) {
-            dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), s * 1.05f, s * 1.05f), sw.Get());
+        if (idx < tools::kQuickPalette.size() && scratchBrush != nullptr) {
+            scratchBrush->SetColor(ToD2DColor(tools::kQuickPalette[idx]));
+            dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), s * 1.05f, s * 1.05f), scratchBrush);
             const bool selected = (state.activeColor == tools::kQuickPalette[idx]);
             dc->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), s * 1.05f, s * 1.05f),
                             fgBrush, (selected ? 2.2f : 1.0f) * scale);
@@ -395,6 +395,9 @@ void UIRenderer::RenderOverlayChrome(
     DrawGlassPanel(dc, state.layout.colorPopupRect, cornerR, panelBgBrush.Get(), panelBorderBrush.Get(), scale);
     DrawGlassPanel(dc, state.layout.strokePopupRect, cornerR, panelBgBrush.Get(), panelBorderBrush.Get(), scale);
 
+    ComPtr<ID2D1SolidColorBrush> scratchBrush;
+    dc->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &scratchBrush);
+
     for (const auto& btn : state.layout.buttons) {
         const bool enabled = IsButtonEnabled(btn.id, state);
         const bool selected = IsButtonSelected(btn.id, state);
@@ -410,7 +413,7 @@ void UIRenderer::RenderOverlayChrome(
 
         ID2D1Brush* fg = !enabled ? mutedBrush.Get()
                                   : (btn.id == ui::ToolbarButtonId::Cancel ? cancelBrush.Get() : whiteBrush.Get());
-        DrawButtonIcon(dc, d2dFactory, dwriteFactory, btn.id, btn.rect, scale, fg, state);
+        DrawButtonIcon(dc, d2dFactory, dwriteFactory, btn.id, btn.rect, scale, fg, scratchBrush.Get(), state);
     }
 
     // 6. Subtle live wheel-sizing HUD pill next to the badge when scrolling size.

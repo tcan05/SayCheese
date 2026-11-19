@@ -139,7 +139,7 @@ bool OverlayWindow::CreateAndShow(
             hwnd_.Get(),
             static_cast<uint32_t>(frame_.width),
             static_cast<uint32_t>(frame_.height),
-            headlessTestMode_) ||
+            false) ||
         !d2d_.UploadDesktopBitmap(frame_)) {
         exitReason_ = OverlayExitReason::RenderError;
         DestroyAndRelease();
@@ -258,7 +258,7 @@ bool OverlayWindow::TryRecoverDeviceLost() {
             hwnd_.Get(),
             static_cast<uint32_t>(frame_.width),
             static_cast<uint32_t>(frame_.height),
-            headlessTestMode_) ||
+            false) ||
         !d2d_.UploadDesktopBitmap(frame_)) {
         return false;
     }
@@ -584,21 +584,21 @@ LRESULT CALLBACK OverlayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wParam
     }
 
     if (self != nullptr) {
-        return self->HandleMessage(msg, wParam, lParam);
+        return self->HandleMessage(hwnd, msg, wParam, lParam);
     }
     return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-LRESULT OverlayWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_ERASEBKGND:
         return 1;
 
     case WM_PAINT: {
         PAINTSTRUCT ps{};
-        ::BeginPaint(hwnd_.Get(), &ps);
+        ::BeginPaint(hwnd, &ps);
         RenderFrame();
-        ::EndPaint(hwnd_.Get(), &ps);
+        ::EndPaint(hwnd, &ps);
         return 0;
     }
 
@@ -939,7 +939,7 @@ LRESULT OverlayWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         break;
     }
 
-    return ::DefWindowProcW(hwnd_.Get(), msg, wParam, lParam);
+    return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
 void OverlayWindow::ApplySyntheticTestAnnotations() {

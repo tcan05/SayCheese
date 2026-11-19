@@ -200,7 +200,6 @@ bool SaveWicBitmapToFile(
         PROPBAG2 option{};
         option.pstrName = const_cast<LPOLESTR>(L"ImageQuality");
         VARIANT varValue{};
-        VariantInit(&varValue);
         varValue.vt = VT_R4;
         varValue.fltVal = 0.92f;
         props->Write(1, &option, &varValue);

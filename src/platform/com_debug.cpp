@@ -31,19 +31,18 @@ DxgiLiveObjectReport ReportDebugDxgiLiveObjects() {
     DxgiLiveObjectReport report{};
 #ifdef _DEBUG
     using DXGIGetDebugInterface1Fn = HRESULT(WINAPI*)(UINT, REFIID, void**);
+    using DXGIGetDebugInterfaceFn = HRESULT(WINAPI*)(REFIID, void**);
 
-    HMODULE dxgiDebugMod = ::GetModuleHandleW(L"dxgidebug.dll");
-    bool loadedHere = false;
-    if (dxgiDebugMod == nullptr) {
-        dxgiDebugMod = ::LoadLibraryW(L"dxgidebug.dll");
-        loadedHere = (dxgiDebugMod != nullptr);
-    }
-    if (dxgiDebugMod == nullptr) {
-        report.available = false;
-        report.summary = "dxgidebug.dll not installed on system";
-        return report;
-    }
+    Microsoft::WRL::ComPtr<IDXGIDebug1> dxgiDebug;
+    Microsoft::WRL::ComPtr<IDXGIInfoQueue> infoQueue;
 
+    // DXGIGetDebugInterface1 is exported by dxgi.dll on Windows 8.1+.
+    HMODULE dxgiMod = ::GetModuleHandleW(L"dxgi.dll");
+    bool loadedDxgi = false;
+    if (dxgiMod == nullptr) {
+        dxgiMod = ::LoadLibraryW(L"dxgi.dll");
+        loadedDxgi = (dxgiMod != nullptr);
+    }
     struct ModuleRelease {
         HMODULE mod = nullptr;
         bool own = false;
@@ -52,27 +51,48 @@ DxgiLiveObjectReport ReportDebugDxgiLiveObjects() {
                 ::FreeLibrary(mod);
             }
         }
-    } modGuard{dxgiDebugMod, loadedHere};
+    } dxgiGuard{dxgiMod, loadedDxgi};
 
-    auto* getDebugInterface1 = reinterpret_cast<DXGIGetDebugInterface1Fn>(
-        ::GetProcAddress(dxgiDebugMod, "DXGIGetDebugInterface1"));
-    if (getDebugInterface1 == nullptr) {
-        report.available = false;
-        report.summary = "DXGIGetDebugInterface1 unavailable";
-        return report;
+    if (dxgiMod != nullptr) {
+        auto* getDebug1 = reinterpret_cast<DXGIGetDebugInterface1Fn>(
+            ::GetProcAddress(dxgiMod, "DXGIGetDebugInterface1"));
+        if (getDebug1 != nullptr) {
+            getDebug1(0, IID_PPV_ARGS(&dxgiDebug));
+            getDebug1(0, IID_PPV_ARGS(&infoQueue));
+        }
     }
 
-    Microsoft::WRL::ComPtr<IDXGIDebug1> dxgiDebug;
-    if (FAILED(getDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug))) || !dxgiDebug) {
+    // Fallback to dxgidebug.dll's DXGIGetDebugInterface if needed.
+    HMODULE dbgMod = nullptr;
+    bool loadedDbg = false;
+    if (!dxgiDebug) {
+        dbgMod = ::GetModuleHandleW(L"dxgidebug.dll");
+        if (dbgMod == nullptr) {
+            dbgMod = ::LoadLibraryW(L"dxgidebug.dll");
+            loadedDbg = (dbgMod != nullptr);
+        }
+        if (dbgMod != nullptr) {
+            auto* getDebug = reinterpret_cast<DXGIGetDebugInterfaceFn>(
+                ::GetProcAddress(dbgMod, "DXGIGetDebugInterface"));
+            if (getDebug != nullptr) {
+                getDebug(IID_PPV_ARGS(&dxgiDebug));
+                if (!infoQueue) {
+                    getDebug(IID_PPV_ARGS(&infoQueue));
+                }
+            }
+        }
+    }
+    ModuleRelease dbgGuard{dbgMod, loadedDbg};
+
+    if (!dxgiDebug) {
         report.available = false;
-        report.summary = "Failed to acquire IDXGIDebug1";
+        report.summary = "IDXGIDebug1 unavailable (Graphics Tools optional feature not installed)";
         return report;
     }
 
     report.available = true;
 
-    Microsoft::WRL::ComPtr<IDXGIInfoQueue> infoQueue;
-    if (SUCCEEDED(getDebugInterface1(0, IID_PPV_ARGS(&infoQueue))) && infoQueue) {
+    if (infoQueue) {
         infoQueue->ClearStoredMessages(DXGI_DEBUG_ALL);
     }
 

@@ -29,6 +29,12 @@ D2D1_RECT_F ToD2DRect(tools::RectF r) noexcept {
 
 void SceneRenderer::ClearCache() noexcept {
     mosaicCache_.clear();
+    blurSubBitmapCache_.clear();
+    if (blurEffect_) {
+        blurEffect_->SetInput(0, nullptr);
+    }
+    blurEffect_.Reset();
+    cachedEffectDc_ = nullptr;
 }
 
 void SceneRenderer::RenderScene(
@@ -348,43 +354,76 @@ void SceneRenderer::DrawCensorGaussianBlur(
         return;
     }
 
-    const D2D1_SIZE_F bmpSize = desktopBitmap->GetSize();
+    const D2D1_SIZE_U bmpPx = desktopBitmap->GetPixelSize();
     const tools::RectF norm = ann.rect.Normalized();
-    const D2D1_RECT_F clamped = D2D1::RectF(
-        std::clamp(norm.left, 0.0f, bmpSize.width),
-        std::clamp(norm.top, 0.0f, bmpSize.height),
-        std::clamp(norm.right, 0.0f, bmpSize.width),
-        std::clamp(norm.bottom, 0.0f, bmpSize.height));
-    if (clamped.right <= clamped.left || clamped.bottom <= clamped.top) {
+    const int left = std::clamp(static_cast<int>(std::floor(norm.left)), 0, static_cast<int>(bmpPx.width));
+    const int top = std::clamp(static_cast<int>(std::floor(norm.top)), 0, static_cast<int>(bmpPx.height));
+    const int right = std::clamp(static_cast<int>(std::ceil(norm.right)), 0, static_cast<int>(bmpPx.width));
+    const int bottom = std::clamp(static_cast<int>(std::ceil(norm.bottom)), 0, static_cast<int>(bmpPx.height));
+    const int rw = right - left;
+    const int rh = bottom - top;
+    if (rw <= 0 || rh <= 0) {
         return;
     }
 
-    ComPtr<ID2D1Effect> cropEffect;
-    ComPtr<ID2D1Effect> borderEffect;
-    ComPtr<ID2D1Effect> blurEffect;
-    if (FAILED(dc->CreateEffect(CLSID_D2D1Crop, &cropEffect)) ||
-        FAILED(dc->CreateEffect(CLSID_D2D1Border, &borderEffect)) ||
-        FAILED(dc->CreateEffect(CLSID_D2D1GaussianBlur, &blurEffect))) {
-        return;
+    if (cachedEffectDc_ != dc || !blurEffect_) {
+        blurEffect_.Reset();
+        blurSubBitmapCache_.clear();
+        cachedEffectDc_ = nullptr;
+        if (FAILED(dc->CreateEffect(CLSID_D2D1GaussianBlur, &blurEffect_)) || !blurEffect_) {
+            return;
+        }
+        cachedEffectDc_ = dc;
+    }
+
+    ID2D1Bitmap1* subBmpPtr = nullptr;
+    if (ann.id != 0) {
+        auto it = blurSubBitmapCache_.find(ann.id);
+        if (it != blurSubBitmapCache_.end() &&
+            it->second.left == left && it->second.top == top &&
+            it->second.right == right && it->second.bottom == bottom &&
+            it->second.subBitmap) {
+            subBmpPtr = it->second.subBitmap.Get();
+        }
+    }
+
+    ComPtr<ID2D1Bitmap1> tempSubBmp;
+    if (subBmpPtr == nullptr) {
+        const D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_NONE,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+            96.0f,
+            96.0f);
+        if (FAILED(dc->CreateBitmap(D2D1::SizeU(static_cast<UINT32>(rw), static_cast<UINT32>(rh)),
+                                    nullptr, 0, &props, &tempSubBmp)) || !tempSubBmp) {
+            return;
+        }
+        const D2D1_RECT_U srcRect = D2D1::RectU(
+            static_cast<UINT32>(left), static_cast<UINT32>(top),
+            static_cast<UINT32>(right), static_cast<UINT32>(bottom));
+        if (FAILED(tempSubBmp->CopyFromBitmap(nullptr, desktopBitmap, &srcRect))) {
+            return;
+        }
+        subBmpPtr = tempSubBmp.Get();
+        if (ann.id != 0) {
+            blurSubBitmapCache_[ann.id] = BlurCacheEntry{left, top, right, bottom, tempSubBmp};
+        }
     }
 
     const float sigma = std::clamp(ann.censorIntensity, 2.0f, 36.0f);
+    blurEffect_->SetInput(0, subBmpPtr);
+    blurEffect_->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, sigma);
+    blurEffect_->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, D2D1_BORDER_MODE_HARD);
+    blurEffect_->SetValue(D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION, D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED);
 
-    cropEffect->SetInput(0, desktopBitmap);
-    cropEffect->SetValue(D2D1_CROP_PROP_RECT, D2D1::Vector4F(clamped.left, clamped.top, clamped.right, clamped.bottom));
-
-    borderEffect->SetInputEffect(0, cropEffect.Get());
-    borderEffect->SetValue(D2D1_BORDER_PROP_EDGE_MODE_X, D2D1_BORDER_EDGE_MODE_CLAMP);
-    borderEffect->SetValue(D2D1_BORDER_PROP_EDGE_MODE_Y, D2D1_BORDER_EDGE_MODE_CLAMP);
-
-    blurEffect->SetInputEffect(0, borderEffect.Get());
-    blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, sigma);
-    blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, D2D1_BORDER_MODE_HARD);
-    blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION, D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED);
-
-    dc->PushAxisAlignedClip(clamped, D2D1_ANTIALIAS_MODE_ALIASED);
-    dc->DrawImage(blurEffect.Get(), D2D1::Point2F(0.0f, 0.0f), clamped, D2D1_INTERPOLATION_MODE_LINEAR);
+    const D2D1_RECT_F dstRect = D2D1::RectF(
+        static_cast<float>(left), static_cast<float>(top),
+        static_cast<float>(right), static_cast<float>(bottom));
+    dc->PushAxisAlignedClip(dstRect, D2D1_ANTIALIAS_MODE_ALIASED);
+    dc->DrawImage(blurEffect_.Get(), D2D1::Point2F(dstRect.left, dstRect.top));
     dc->PopAxisAlignedClip();
+
+    blurEffect_->SetInput(0, nullptr);
 }
 
 } // namespace saycheese::render

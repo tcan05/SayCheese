@@ -68,7 +68,7 @@ private:
 
     static ATOM RegisterOverlayClass(HINSTANCE hInstance);
     static LRESULT CALLBACK StaticWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-    LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam);
+    LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
     void RecomputeLayout();
     void InvalidateCanvas() noexcept;

@@ -190,12 +190,12 @@ LRESULT CALLBACK AppController::StaticWndProc(HWND hwnd, UINT msg, WPARAM wParam
     }
 
     if (self != nullptr) {
-        return self->HandleMessage(msg, wParam, lParam);
+        return self->HandleMessage(hwnd, msg, wParam, lParam);
     }
     return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-LRESULT AppController::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT AppController::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (taskbarCreatedMsg_ != 0 && msg == taskbarCreatedMsg_) {
         trayIcon_.Recreate();
         return 0;
@@ -250,7 +250,7 @@ LRESULT AppController::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         break;
     }
 
-    return ::DefWindowProcW(trayHwnd_.Get(), msg, wParam, lParam);
+    return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
 } // namespace saycheese::app

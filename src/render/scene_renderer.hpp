@@ -68,7 +68,18 @@ private:
         ID2D1Bitmap* desktopBitmap,
         const tools::Annotation& ann);
 
+    struct BlurCacheEntry {
+        int left = 0;
+        int top = 0;
+        int right = 0;
+        int bottom = 0;
+        Microsoft::WRL::ComPtr<ID2D1Bitmap1> subBitmap;
+    };
+
     std::unordered_map<uint64_t, MosaicCacheEntry> mosaicCache_;
+    std::unordered_map<uint64_t, BlurCacheEntry> blurSubBitmapCache_;
+    ID2D1DeviceContext* cachedEffectDc_ = nullptr;
+    Microsoft::WRL::ComPtr<ID2D1Effect> blurEffect_;
 };
 
 } // namespace saycheese::render
