@@ -23,6 +23,8 @@ add_library(saycheese_core STATIC
     src/render/d2d_context.cpp
     src/render/scene_renderer.cpp
     src/render/ui_renderer.cpp
+    src/export/wic_exporter.cpp
+    src/export/clipboard_export.cpp
     src/tools/geometry.cpp
     src/tools/command_stack.cpp
     src/tools/tool_controller.cpp
@@ -87,3 +89,4 @@ saycheese_add_unit_test(test_geometry tests/test_geometry.cpp)
 saycheese_add_unit_test(test_command_stack tests/test_command_stack.cpp)
 saycheese_add_unit_test(test_tool_controller tests/test_tool_controller.cpp)
 saycheese_add_unit_test(test_capture_conversion tests/test_capture_conversion.cpp)
+saycheese_add_unit_test(test_export tests/test_export.cpp)
