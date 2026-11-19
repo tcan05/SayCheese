@@ -1,0 +1,10 @@
+build/
+out/
+.vs/
+.superpowers/
+*.user
+*.suo
+*.pdb
+*.ilk
+*.obj
+*.log
