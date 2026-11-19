@@ -228,12 +228,11 @@ ToolbarLayoutResult ComputeToolbarLayout(
         }
     }
 
-    // 6. Contextual Stroke / Size Presets Popup (Thin | Medium | Thick)
+    // 6. Contextual Stroke / Size Presets Popup (Thin | Medium)
     if (state.strokePopupOpen) {
-        constexpr std::array<ToolbarButtonId, 3> kPresets{
+        constexpr std::array<ToolbarButtonId, 2> kPresets{
             ToolbarButtonId::PresetThin,
-            ToolbarButtonId::PresetMedium,
-            ToolbarButtonId::PresetThick
+            ToolbarButtonId::PresetMedium
         };
         const float pw = 34.0f * scale;
         const float ph = 26.0f * scale;

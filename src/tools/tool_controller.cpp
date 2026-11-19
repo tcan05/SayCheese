@@ -99,11 +99,11 @@ void ToolController::AdjustSizeByWheel(int wheelSteps) noexcept {
 }
 
 void ToolController::ApplySizePreset(int presetIndex) noexcept {
-    const int idx = std::clamp(presetIndex, 0, 2);
-    static constexpr float kStrokePresets[3] = {2.0f, 5.0f, 10.0f};
-    static constexpr float kFontPresets[3] = {18.0f, 28.0f, 42.0f};
-    static constexpr float kMosaicPresets[3] = {8.0f, 14.0f, 22.0f};
-    static constexpr float kBlurPresets[3] = {6.0f, 12.0f, 18.0f};
+    const int idx = std::clamp(presetIndex, 0, 1);
+    static constexpr float kStrokePresets[2] = {2.0f, 5.0f};
+    static constexpr float kFontPresets[2] = {18.0f, 28.0f};
+    static constexpr float kMosaicPresets[2] = {8.0f, 14.0f};
+    static constexpr float kBlurPresets[2] = {6.0f, 12.0f};
 
     switch (activeTool_) {
     case ToolType::Text:
@@ -217,6 +217,11 @@ void ToolController::OnPointerUp(PointF pt, bool shiftHeld) {
     if (valid) {
         commandStack_.PushAndExecute(std::make_unique<AddAnnotationCommand>(annotations_, std::move(committed)));
     }
+}
+
+void ToolController::CancelActiveDrag() noexcept {
+    isDragging_ = false;
+    activePreview_.reset();
 }
 
 void ToolController::UpdateActivePreviewGeometry(PointF currentPt, bool shiftHeld) {

@@ -51,6 +51,7 @@ public:
     void OnPointerDown(PointF pt, bool shiftHeld);
     void OnPointerMove(PointF pt, bool shiftHeld);
     void OnPointerUp(PointF pt, bool shiftHeld);
+    void CancelActiveDrag() noexcept;
 
     void OnTextChar(wchar_t ch);
     void OnTextBackspace();

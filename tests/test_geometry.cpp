@@ -201,6 +201,20 @@ SC_TEST("Toolbar layout clamps inside mixed-DPI negative-origin monitor and hand
     SC_EXPECT_TRUE(RectInside(lay1.actionBarRect, mon1Bounds));
     SC_EXPECT_TRUE(RectInside(lay1.badgeRect, mon1Bounds));
     SC_EXPECT_TRUE(RectInside(lay1.strokePopupRect, mon1Bounds));
+
+    int popupButtonCount = 0;
+    bool hasPresetThin = false;
+    bool hasPresetMedium = false;
+    for (const auto& btn : lay1.buttons) {
+        if (btn.isPopup) {
+            ++popupButtonCount;
+            if (btn.id == ToolbarButtonId::PresetThin) hasPresetThin = true;
+            if (btn.id == ToolbarButtonId::PresetMedium) hasPresetMedium = true;
+        }
+    }
+    SC_EXPECT_EQ(popupButtonCount, 2);
+    SC_EXPECT_TRUE(hasPresetThin);
+    SC_EXPECT_TRUE(hasPresetMedium);
 }
 
 int main() {

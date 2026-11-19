@@ -80,9 +80,59 @@ void DrawButtonIcon(
 
     switch (id) {
     case ui::ToolbarButtonId::ToolPen: {
-        // Diagonal pen nib
-        dc->DrawLine(D2D1::Point2F(cx - s, cy + s), D2D1::Point2F(cx + s * 0.7f, cy - s * 0.7f), fgBrush, stroke * 1.15f);
-        dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx - s, cy + s), stroke * 0.7f, stroke * 0.7f), fgBrush);
+        const D2D1_POINT_2F tip = D2D1::Point2F(cx - 1.00f * s, cy + 1.00f * s);
+        const D2D1_POINT_2F pNibL = D2D1::Point2F(cx - 0.64f * s, cy + 0.20f * s);
+        const D2D1_POINT_2F pNibR = D2D1::Point2F(cx - 0.20f * s, cy + 0.64f * s);
+        const D2D1_POINT_2F pCapL = D2D1::Point2F(cx + 0.24f * s, cy - 0.68f * s);
+        const D2D1_POINT_2F pCapR = D2D1::Point2F(cx + 0.68f * s, cy - 0.24f * s);
+        const D2D1_POINT_2F pTopL = D2D1::Point2F(cx + 0.54f * s, cy - 0.98f * s);
+        const D2D1_POINT_2F pTopR = D2D1::Point2F(cx + 0.98f * s, cy - 0.54f * s);
+
+        if (d2dFactory != nullptr) {
+            ComPtr<ID2D1PathGeometry> bodyGeo;
+            ComPtr<ID2D1GeometrySink> bodySink;
+            if (SUCCEEDED(d2dFactory->CreatePathGeometry(&bodyGeo)) &&
+                SUCCEEDED(bodyGeo->Open(&bodySink))) {
+                bodySink->BeginFigure(tip, D2D1_FIGURE_BEGIN_HOLLOW);
+                bodySink->AddLine(pNibL);
+                bodySink->AddLine(pTopL);
+                bodySink->AddLine(pTopR);
+                bodySink->AddLine(pNibR);
+                bodySink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                if (SUCCEEDED(bodySink->Close())) {
+                    ComPtr<ID2D1StrokeStyle> roundStyle;
+                    const D2D1_STROKE_STYLE_PROPERTIES props = D2D1::StrokeStyleProperties(
+                        D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND);
+                    d2dFactory->CreateStrokeStyle(props, nullptr, 0, &roundStyle);
+                    dc->DrawGeometry(bodyGeo.Get(), fgBrush, stroke * 0.95f, roundStyle.Get());
+                }
+            }
+
+            dc->DrawLine(pNibL, pNibR, fgBrush, stroke * 0.80f);
+            dc->DrawLine(pCapL, pCapR, fgBrush, stroke * 0.80f);
+
+            ComPtr<ID2D1PathGeometry> tipGeo;
+            ComPtr<ID2D1GeometrySink> tipSink;
+            if (SUCCEEDED(d2dFactory->CreatePathGeometry(&tipGeo)) &&
+                SUCCEEDED(tipGeo->Open(&tipSink))) {
+                const D2D1_POINT_2F tipL = D2D1::Point2F(
+                    tip.x + 0.45f * (pNibL.x - tip.x),
+                    tip.y + 0.45f * (pNibL.y - tip.y));
+                const D2D1_POINT_2F tipR = D2D1::Point2F(
+                    tip.x + 0.45f * (pNibR.x - tip.x),
+                    tip.y + 0.45f * (pNibR.y - tip.y));
+                tipSink->BeginFigure(tip, D2D1_FIGURE_BEGIN_FILLED);
+                tipSink->AddLine(tipL);
+                tipSink->AddLine(tipR);
+                tipSink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                if (SUCCEEDED(tipSink->Close())) {
+                    dc->FillGeometry(tipGeo.Get(), fgBrush);
+                }
+            }
+        } else {
+            dc->DrawLine(tip, D2D1::Point2F(cx + s * 0.7f, cy - s * 0.7f), fgBrush, stroke * 1.15f);
+            dc->FillEllipse(D2D1::Ellipse(tip, stroke * 0.7f, stroke * 0.7f), fgBrush);
+        }
         break;
     }
     case ui::ToolbarButtonId::ToolLine:
@@ -213,14 +263,9 @@ void DrawButtonIcon(
         DrawCenteredLabel(dc, dwriteFactory, L"M", r, 12.0f * scale, fgBrush, DWRITE_FONT_WEIGHT_BOLD);
         break;
 
-    case ui::ToolbarButtonId::PresetThick:
-        DrawCenteredLabel(dc, dwriteFactory, L"L", r, 12.0f * scale, fgBrush, DWRITE_FONT_WEIGHT_BOLD);
-        break;
-
     case ui::ToolbarButtonId::None:
         break;
     }
-    (void)d2dFactory;
 }
 
 bool IsButtonSelected(ui::ToolbarButtonId id, const UIRenderState& state) noexcept {

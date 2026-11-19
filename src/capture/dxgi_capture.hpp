@@ -4,6 +4,7 @@
 
 #include <windows.h>
 
+#include <cstdint>
 #include <vector>
 
 namespace saycheese::capture {
@@ -14,6 +15,8 @@ struct DxgiCaptureSummary {
     std::vector<RECT> capturedVirtualRects;
 };
 
-DxgiCaptureSummary CaptureMonitorsDxgi(CapturedFrame& dstFrame);
+bool IsDxgiDesktopFrameUpdated(int64_t lastPresentTime) noexcept;
+bool AnyActiveMonitorUsesHdr() noexcept;
+DxgiCaptureSummary CaptureMonitorsDxgi(CapturedFrame& dstFrame, bool hdrOutputsOnly = false);
 
 } // namespace saycheese::capture

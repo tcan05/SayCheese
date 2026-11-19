@@ -141,6 +141,8 @@ bool D2DContext::InitializeForWindow(HWND hwnd, uint32_t width, uint32_t height,
         return false;
     }
 
+    // Opt out of Independent Flip / Hardware MPO / FreeSync handoff blackouts by using
+    // DWM-composed Blt presentation with GDI compatibility when supported.
     DXGI_SWAP_CHAIN_DESC1 scDesc{};
     scDesc.Width = width;
     scDesc.Height = height;
@@ -149,16 +151,24 @@ bool D2DContext::InitializeForWindow(HWND hwnd, uint32_t width, uint32_t height,
     scDesc.SampleDesc.Count = 1;
     scDesc.SampleDesc.Quality = 0;
     scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    scDesc.BufferCount = 2;
+    scDesc.BufferCount = 1;
     scDesc.Scaling = DXGI_SCALING_STRETCH;
-    scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    scDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+    scDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+    scDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+    scDesc.Flags = DXGI_SWAP_CHAIN_FLAG_GDI_COMPATIBLE;
 
     HRESULT hr = dxgiFactory->CreateSwapChainForHwnd(
         d3dDevice_.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain_);
     if (FAILED(hr) || !swapChain_) {
-        // Fallback to sequential flip if FLIP_DISCARD is rejected on older/virtual adapters.
+        scDesc.Flags = 0;
+        hr = dxgiFactory->CreateSwapChainForHwnd(
+            d3dDevice_.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain_);
+    }
+    if (FAILED(hr) || !swapChain_) {
+        scDesc.BufferCount = 2;
         scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+        scDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+        scDesc.Flags = 0;
         hr = dxgiFactory->CreateSwapChainForHwnd(
             d3dDevice_.Get(), hwnd, &scDesc, nullptr, nullptr, &swapChain_);
     }
@@ -220,7 +230,7 @@ HRESULT D2DContext::Present() {
     if (!swapChain_) {
         return S_OK;
     }
-    return swapChain_->Present(1, 0);
+    return swapChain_->Present(0, 0);
 }
 
 void D2DContext::Reset() noexcept {

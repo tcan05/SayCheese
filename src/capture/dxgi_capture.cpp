@@ -65,30 +65,58 @@ SurfaceRotation MapRotation(DXGI_MODE_ROTATION rot) noexcept {
     }
 }
 
-float QueryMonitorSdrWhiteMultiplier(const wchar_t* deviceName) noexcept {
-    if (deviceName == nullptr || deviceName[0] == L'\0') {
-        return 1.0f;
-    }
+struct MonitorColorConfig {
+    bool hdrEnabled = false;
+    float sdrWhiteMultiplier = 1.0f;
+};
+
+bool QueryActiveDisplayPaths(
+    std::vector<DISPLAYCONFIG_PATH_INFO>& paths,
+    std::vector<DISPLAYCONFIG_MODE_INFO>& modes) noexcept {
     UINT32 pathCount = 0;
     UINT32 modeCount = 0;
     if (::GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS ||
         pathCount == 0) {
-        return 1.0f;
+        return false;
     }
 
-    std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
-    std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
-    if (::QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(),
-                             &modeCount, modes.data(), nullptr) != ERROR_SUCCESS) {
-        return 1.0f;
+    paths.resize(pathCount);
+    modes.resize(modeCount);
+    return ::QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(),
+                                &modeCount, modes.data(), nullptr) == ERROR_SUCCESS &&
+           pathCount > 0;
+}
+
+bool QueryPathAdvancedColorEnabled(const DISPLAYCONFIG_PATH_INFO& path) noexcept {
+    DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo{};
+    colorInfo.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+    colorInfo.header.size = sizeof(colorInfo);
+    colorInfo.header.adapterId = path.targetInfo.adapterId;
+    colorInfo.header.id = path.targetInfo.id;
+    if (::DisplayConfigGetDeviceInfo(&colorInfo.header) != ERROR_SUCCESS) {
+        return false;
+    }
+    return colorInfo.advancedColorEnabled != 0;
+}
+
+MonitorColorConfig QueryMonitorColorConfig(const wchar_t* deviceName) noexcept {
+    MonitorColorConfig cfg{};
+    if (deviceName == nullptr || deviceName[0] == L'\0') {
+        return cfg;
     }
 
-    for (UINT32 i = 0; i < pathCount; ++i) {
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths;
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes;
+    if (!QueryActiveDisplayPaths(paths, modes)) {
+        return cfg;
+    }
+
+    for (const auto& path : paths) {
         DISPLAYCONFIG_SOURCE_DEVICE_NAME srcName{};
         srcName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
         srcName.header.size = sizeof(srcName);
-        srcName.header.adapterId = paths[i].sourceInfo.adapterId;
-        srcName.header.id = paths[i].sourceInfo.id;
+        srcName.header.adapterId = path.sourceInfo.adapterId;
+        srcName.header.id = path.sourceInfo.id;
         if (::DisplayConfigGetDeviceInfo(&srcName.header) != ERROR_SUCCESS) {
             continue;
         }
@@ -96,17 +124,20 @@ float QueryMonitorSdrWhiteMultiplier(const wchar_t* deviceName) noexcept {
             continue;
         }
 
+        cfg.hdrEnabled = QueryPathAdvancedColorEnabled(path);
+
         DISPLAYCONFIG_SDR_WHITE_LEVEL whiteLevel{};
         whiteLevel.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL;
         whiteLevel.header.size = sizeof(whiteLevel);
-        whiteLevel.header.adapterId = paths[i].targetInfo.adapterId;
-        whiteLevel.header.id = paths[i].targetInfo.id;
+        whiteLevel.header.adapterId = path.targetInfo.adapterId;
+        whiteLevel.header.id = path.targetInfo.id;
         if (::DisplayConfigGetDeviceInfo(&whiteLevel.header) == ERROR_SUCCESS &&
             whiteLevel.SDRWhiteLevel >= 1000) {
-            return static_cast<float>(whiteLevel.SDRWhiteLevel) / 1000.0f;
+            cfg.sdrWhiteMultiplier = static_cast<float>(whiteLevel.SDRWhiteLevel) / 1000.0f;
         }
+        return cfg;
     }
-    return 1.0f;
+    return cfg;
 }
 
 HRESULT CreateAdapterD3D11Device(
@@ -192,21 +223,22 @@ bool CaptureSingleOutput(
     D3D11_TEXTURE2D_DESC stagedDesc{};
     bool hasStagedFrame = false;
 
-    // Bounded non-blocking acquisition: max 5 attempts, <=100ms timeout per call.
-    constexpr int kMaxAttempts = 5;
-    constexpr UINT kAcquireTimeoutMs = 100;
+    // Bounded non-blocking acquisition: reject unpopulated LastPresentTime==0 frames and time out quickly.
+    constexpr int kMaxAttempts = 6;
+    constexpr UINT kAcquireTimeoutMs = 25;
+    constexpr ULONGLONG kDeadlineMs = 80;
+    const ULONGLONG startTick = ::GetTickCount64();
 
     for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+        if (attempt > 0 && (::GetTickCount64() - startTick) >= kDeadlineMs) {
+            break;
+        }
+
         DXGI_OUTDUPL_FRAME_INFO frameInfo{};
         ComPtr<IDXGIResource> desktopRes;
-        const UINT timeoutMs = hasStagedFrame ? 50u : kAcquireTimeoutMs;
-        const HRESULT hr = duplication->AcquireNextFrame(timeoutMs, &frameInfo, &desktopRes);
+        const HRESULT hr = duplication->AcquireNextFrame(kAcquireTimeoutMs, &frameInfo, &desktopRes);
 
         if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
-            if (hasStagedFrame) {
-                // Static desktop: keep valid staged frame from earlier S_OK.
-                break;
-            }
             continue;
         }
         if (hr == DXGI_ERROR_ACCESS_LOST || FAILED(hr)) {
@@ -215,8 +247,12 @@ bool CaptureSingleOutput(
 
         ReleaseFrameGuard releaseGuard(duplication.Get());
 
+        if (!IsDxgiDesktopFrameUpdated(frameInfo.LastPresentTime.QuadPart)) {
+            continue;
+        }
+
         ComPtr<ID3D11Texture2D> desktopTex;
-        if (FAILED(desktopRes.As(&desktopTex)) || !desktopTex) {
+        if (!desktopRes || FAILED(desktopRes.As(&desktopTex)) || !desktopTex) {
             return false;
         }
 
@@ -243,11 +279,7 @@ bool CaptureSingleOutput(
 
         context->CopyResource(stagingTex.Get(), desktopTex.Get());
         hasStagedFrame = true;
-
-        // If desktop pixels were updated (or we already completed our short static-desktop check), finish now.
-        if (frameInfo.LastPresentTime.QuadPart != 0 || frameInfo.AccumulatedFrames > 0 || attempt >= 1) {
-            break;
-        }
+        break;
     }
 
     if (!hasStagedFrame || !stagingTex) {
@@ -273,7 +305,7 @@ bool CaptureSingleOutput(
         reportedRot);
 
     const float sdrWhite = (fmt == SurfaceFormat::RGBA16F)
-        ? QueryMonitorSdrWhiteMultiplier(outputDesc.DeviceName)
+        ? QueryMonitorColorConfig(outputDesc.DeviceName).sdrWhiteMultiplier
         : 1.0f;
 
     D3D11_MAPPED_SUBRESOURCE mapped{};
@@ -301,7 +333,25 @@ bool CaptureSingleOutput(
 
 } // namespace
 
-DxgiCaptureSummary CaptureMonitorsDxgi(CapturedFrame& dstFrame) {
+bool IsDxgiDesktopFrameUpdated(int64_t lastPresentTime) noexcept {
+    return lastPresentTime != 0;
+}
+
+bool AnyActiveMonitorUsesHdr() noexcept {
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths;
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes;
+    if (!QueryActiveDisplayPaths(paths, modes)) {
+        return false;
+    }
+    for (const auto& path : paths) {
+        if (QueryPathAdvancedColorEnabled(path)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+DxgiCaptureSummary CaptureMonitorsDxgi(CapturedFrame& dstFrame, bool hdrOutputsOnly) {
     DxgiCaptureSummary summary{};
     if (!dstFrame.IsValid()) {
         return summary;
@@ -343,6 +393,9 @@ DxgiCaptureSummary CaptureMonitorsDxgi(CapturedFrame& dstFrame) {
             }
             DXGI_OUTPUT_DESC outDesc{};
             if (SUCCEEDED(output->GetDesc(&outDesc)) && outDesc.AttachedToDesktop) {
+                if (hdrOutputsOnly && !QueryMonitorColorConfig(outDesc.DeviceName).hdrEnabled) {
+                    continue;
+                }
                 attachedOutputs.emplace_back(std::move(output), outDesc);
             }
         }

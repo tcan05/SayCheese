@@ -150,8 +150,13 @@ bool OverlayWindow::CreateAndShow(
         return false;
     }
 
+    // Render the first frame before showing the window so an unpresented backbuffer is never exposed.
+    RenderFrame();
+    if (!hwnd_.IsValid()) {
+        return false;
+    }
+
     if (!headlessTestMode_) {
-        ::ShowWindow(hwnd_.Get(), SW_SHOW);
         ::SetWindowPos(
             hwnd_.Get(),
             HWND_TOPMOST,
@@ -162,9 +167,13 @@ bool OverlayWindow::CreateAndShow(
             SWP_SHOWWINDOW);
         ::SetForegroundWindow(hwnd_.Get());
         ::SetFocus(hwnd_.Get());
+        RenderFrame();
+        if (!hwnd_.IsValid()) {
+            return false;
+        }
+        ::ValidateRect(hwnd_.Get(), nullptr);
     }
 
-    RenderFrame();
     return true;
 }
 
@@ -177,6 +186,7 @@ void OverlayWindow::DestroyAndRelease() noexcept {
     if (hwnd_.IsValid()) {
         StopCaretTimer();
         ::KillTimer(hwnd_.Get(), kSizeHudTimerId);
+        dragMode_ = DragMode::None;
         if (::GetCapture() == hwnd_.Get()) {
             ::ReleaseCapture();
         }
@@ -542,12 +552,6 @@ void OverlayWindow::HandleToolbarClick(ToolbarButtonId id) {
         TriggerSizeHud();
         break;
 
-    case ToolbarButtonId::PresetThick:
-        toolController_.ApplySizePreset(2);
-        toolbarState_.strokePopupOpen = false;
-        TriggerSizeHud();
-        break;
-
     case ToolbarButtonId::None:
         break;
     }
@@ -602,7 +606,9 @@ LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         PAINTSTRUCT ps{};
         ::BeginPaint(hwnd, &ps);
         RenderFrame();
-        ::EndPaint(hwnd, &ps);
+        if (::IsWindow(hwnd)) {
+            ::EndPaint(hwnd, &ps);
+        }
         return 0;
     }
 
@@ -754,12 +760,13 @@ LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
     case WM_LBUTTONUP: {
         const tools::PointF pt = PointFromLParam(lParam);
+        const DragMode finishedDrag = dragMode_;
+        dragMode_ = DragMode::None;
         if (::GetCapture() == hwnd_.Get()) {
             ::ReleaseCapture();
         }
 
-        if (dragMode_ == DragMode::CreatingSelection) {
-            dragMode_ = DragMode::None;
+        if (finishedDrag == DragMode::CreatingSelection) {
             selection_.rect = selection_.rect.Normalized();
             if (selection_.rect.Width() < 8.0f || selection_.rect.Height() < 8.0f) {
                 selection_.active = false;
@@ -768,13 +775,11 @@ LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             RenderFrame();
             return 0;
         }
-        if (dragMode_ == DragMode::ResizingSelection || dragMode_ == DragMode::MovingSelection) {
-            dragMode_ = DragMode::None;
+        if (finishedDrag == DragMode::ResizingSelection || finishedDrag == DragMode::MovingSelection) {
             RenderFrame();
             return 0;
         }
-        if (dragMode_ == DragMode::DrawingAnnotation) {
-            dragMode_ = DragMode::None;
+        if (finishedDrag == DragMode::DrawingAnnotation) {
             toolController_.OnPointerUp(pt, IsShiftDown());
             RenderFrame();
             return 0;
@@ -928,8 +933,18 @@ LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         return 0;
 
     case WM_CAPTURECHANGED:
-        if (dragMode_ != DragMode::None && !inModalDialog_) {
+        if (!destroying_ && dragMode_ != DragMode::None && !inModalDialog_) {
+            const DragMode abortedDrag = dragMode_;
             dragMode_ = DragMode::None;
+            if (abortedDrag == DragMode::DrawingAnnotation) {
+                toolController_.CancelActiveDrag();
+            } else if (abortedDrag == DragMode::CreatingSelection) {
+                selection_.rect = selection_.rect.Normalized();
+                if (selection_.rect.Width() < 8.0f || selection_.rect.Height() < 8.0f) {
+                    selection_.active = false;
+                    selection_.rect = {};
+                }
+            }
             RenderFrame();
         }
         return 0;

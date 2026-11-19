@@ -23,6 +23,28 @@ bool WasMonitorCaptured(const RECT& monitorVirtualRect, const std::vector<RECT>&
     return false;
 }
 
+bool FinishDxgiWithPartialGdiFallback(CapturedFrame& frame, const DxgiCaptureSummary& dxgi) {
+    if (dxgi.outputsSucceeded <= 0) {
+        return false;
+    }
+
+    bool usedPartialGdi = false;
+    for (const auto& mon : frame.monitors) {
+        if (!WasMonitorCaptured(mon.virtualRect, dxgi.capturedVirtualRects)) {
+            const int w = mon.virtualRect.right - mon.virtualRect.left;
+            const int h = mon.virtualRect.bottom - mon.virtualRect.top;
+            if (CaptureRegionBitBlt(mon.virtualRect.left, mon.virtualRect.top, w, h,
+                                    mon.canvasRect.left, mon.canvasRect.top, frame)) {
+                usedPartialGdi = true;
+            }
+        }
+    }
+    frame.backend = usedPartialGdi
+        ? CaptureBackend::DxgiPartialWithGdiFallback
+        : CaptureBackend::DxgiDesktopDuplication;
+    return true;
+}
+
 } // namespace
 
 CapturedFrame CaptureVirtualDesktop() {
@@ -45,27 +67,25 @@ CapturedFrame CaptureVirtualDesktop() {
         frame.bgraPixels[i] = 255;
     }
 
-    const DxgiCaptureSummary dxgi = CaptureMonitorsDxgi(frame);
-
-    if (dxgi.outputsSucceeded > 0) {
-        bool usedPartialGdi = false;
-        for (const auto& mon : frame.monitors) {
-            if (!WasMonitorCaptured(mon.virtualRect, dxgi.capturedVirtualRects)) {
-                const int w = mon.virtualRect.right - mon.virtualRect.left;
-                const int h = mon.virtualRect.bottom - mon.virtualRect.top;
-                if (CaptureRegionBitBlt(mon.virtualRect.left, mon.virtualRect.top, w, h,
-                                        mon.canvasRect.left, mon.canvasRect.top, frame)) {
-                    usedPartialGdi = true;
-                }
-            }
+    const bool anyHdr = AnyActiveMonitorUsesHdr();
+    if (!anyHdr) {
+        // SDR fast path: instant GDI BitBlt avoids D3D11/DXGI device startup and AMD MPO/FreeSync stalls.
+        if (CaptureRegionBitBlt(frame.originX, frame.originY, frame.width, frame.height, 0, 0, frame)) {
+            frame.backend = CaptureBackend::GdiBitBltFallback;
+            return frame;
         }
-        frame.backend = usedPartialGdi
-            ? CaptureBackend::DxgiPartialWithGdiFallback
-            : CaptureBackend::DxgiDesktopDuplication;
+        const DxgiCaptureSummary dxgi = CaptureMonitorsDxgi(frame, false);
+        if (FinishDxgiWithPartialGdiFallback(frame, dxgi)) {
+            return frame;
+        }
+        return CapturedFrame{};
+    }
+
+    const DxgiCaptureSummary dxgi = CaptureMonitorsDxgi(frame, true);
+    if (FinishDxgiWithPartialGdiFallback(frame, dxgi)) {
         return frame;
     }
 
-    // Automatic BitBlt fallback (e.g., RDP session, basic display adapter, or DXGI blocked).
     if (CaptureRegionBitBlt(frame.originX, frame.originY, frame.width, frame.height, 0, 0, frame)) {
         frame.backend = CaptureBackend::GdiBitBltFallback;
         return frame;

@@ -53,6 +53,10 @@ public:
     HWND Handle() const noexcept { return hwnd_.Get(); }
     OverlayExitReason ExitReason() const noexcept { return exitReason_; }
 
+    const tools::ToolController& Tools() const noexcept { return toolController_; }
+    const tools::SelectionBox& Selection() const noexcept { return selection_; }
+    const ToolbarLayoutResult& Layout() const noexcept { return layout_; }
+
     // Deterministic verification hooks used by --self-test-leaks and CTest.
     void ApplySyntheticTestAnnotations();
     bool RunOffscreenExportCheck();

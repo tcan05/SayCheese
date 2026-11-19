@@ -33,8 +33,7 @@ enum class ToolbarButtonId {
     CensorMosaic,
     CensorBlur,
     PresetThin,
-    PresetMedium,
-    PresetThick
+    PresetMedium
 };
 
 struct ToolbarButton {

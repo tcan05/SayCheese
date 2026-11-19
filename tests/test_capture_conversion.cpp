@@ -1,6 +1,7 @@
 #include "test_runner.hpp"
 
 #include "capture/captured_frame.hpp"
+#include "capture/dxgi_capture.hpp"
 #include "capture/pixel_convert.hpp"
 
 #include <cmath>
@@ -182,6 +183,12 @@ SC_TEST("ResolveCaptureRotation preserves Rotate180 even when staged dimensions 
                  static_cast<int>(SurfaceRotation::Identity));
     SC_EXPECT_EQ(static_cast<int>(ResolveCaptureRotation(1920, 1080, 1920, 1080, SurfaceRotation::Identity)),
                  static_cast<int>(SurfaceRotation::Identity));
+}
+
+SC_TEST("IsDxgiDesktopFrameUpdated rejects unpopulated LastPresentTime==0 frames and accepts updated frames") {
+    SC_EXPECT_FALSE(IsDxgiDesktopFrameUpdated(0));
+    SC_EXPECT_TRUE(IsDxgiDesktopFrameUpdated(1));
+    SC_EXPECT_TRUE(IsDxgiDesktopFrameUpdated(123456789LL));
 }
 
 int main() {

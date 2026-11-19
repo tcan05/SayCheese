@@ -1,6 +1,7 @@
 # SayCheese
 
-Ultra-fast, zero-dependency Windows 10/11 screenshot capture and annotation desktop application tool.
+Ultra-fast, zero-dependency Windows 10/11 screenshot capture and annotation desktop application.
+
 
 ## Annotation Tools & Keyboard Shortcuts
 
@@ -39,24 +40,6 @@ ctest --test-dir build -C Release --output-on-failure
 
 The standalone portable executable is produced at `build/Release/SayCheese.exe` (statically linked with `/MT`).
 
----
-
-## Automated Leak & Stress Verification
-
-SayCheese ships with a built-in 22-cycle stress verifier (2 warm-up cycles + 20 measured capture → overlay create → 7-tool render → offscreen WYSIWYG export → cancel/destroy cycles):
-
-```powershell
-.\build\Release\SayCheese.exe --self-test-leaks
-```
-
-It verifies between Cycle 2 (baseline) and Cycle 22 (final):
-- `GR_GDIOBJECTS` delta `== 0`
-- `GR_USEROBJECTS` delta `== 0`
-- `GetProcessHandleCount` delta `== 0`
-- `PrivateUsage` delta `< 2 MiB`
-- In Debug builds: `IDXGIDebug1::ReportLiveObjects` confirms **0 live application COM/DXGI objects** and `_CrtSetDbgFlag` verifies **0 CRT heap leaks**.
-
----
 
 ## License
 

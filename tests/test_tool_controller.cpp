@@ -1,8 +1,16 @@
 #include "test_runner.hpp"
 
+#include "capture/captured_frame.hpp"
+#include "platform/win32_raii.hpp"
 #include "tools/tool_controller.hpp"
+#include "ui/overlay_window.hpp"
+
+#include <cmath>
 
 using namespace saycheese::tools;
+using namespace saycheese::ui;
+using namespace saycheese::capture;
+using namespace saycheese::platform;
 
 SC_TEST("Pen and Highlighter strokes commit unique annotations with expected style") {
     ToolController tc;
@@ -122,39 +130,41 @@ SC_TEST("Inline Text editor handles empty bounds, caret movement, newlines, colo
 SC_TEST("Censor mode toggle, wheel sizing clamps, presets, and Undo/Redo work consistently") {
     ToolController tc;
 
-    // Stroke presets: 2 / 5 / 10, clamped 1..24
+    // Stroke presets: 2 / 5 (out-of-range index clamps to Medium), wheel clamps 1..24
     tc.SetActiveTool(ToolType::Pen);
     tc.ApplySizePreset(0);
     SC_EXPECT_NEAR(tc.ActiveSize(), 2.0f, 1e-3);
     tc.ApplySizePreset(1);
     SC_EXPECT_NEAR(tc.ActiveSize(), 5.0f, 1e-3);
     tc.ApplySizePreset(2);
-    SC_EXPECT_NEAR(tc.ActiveSize(), 10.0f, 1e-3);
+    SC_EXPECT_NEAR(tc.ActiveSize(), 5.0f, 1e-3);
     tc.AdjustSizeByWheel(100);
     SC_EXPECT_NEAR(tc.ActiveSize(), 24.0f, 1e-3);
     tc.AdjustSizeByWheel(-100);
     SC_EXPECT_NEAR(tc.ActiveSize(), 1.0f, 1e-3);
 
-    // Text presets: 18 / 28 / 42, clamped 14..72
+    // Text presets: 18 / 28, clamped 14..72
     tc.SetActiveTool(ToolType::Text);
     tc.ApplySizePreset(0);
     SC_EXPECT_NEAR(tc.ActiveSize(), 18.0f, 1e-3);
     tc.ApplySizePreset(1);
     SC_EXPECT_NEAR(tc.ActiveSize(), 28.0f, 1e-3);
     tc.ApplySizePreset(2);
-    SC_EXPECT_NEAR(tc.ActiveSize(), 42.0f, 1e-3);
+    SC_EXPECT_NEAR(tc.ActiveSize(), 28.0f, 1e-3);
     tc.AdjustSizeByWheel(100);
     SC_EXPECT_NEAR(tc.ActiveSize(), 72.0f, 1e-3);
     tc.AdjustSizeByWheel(-100);
     SC_EXPECT_NEAR(tc.ActiveSize(), 14.0f, 1e-3);
 
-    // Censor Mosaic presets: 8 / 14 / 22 (clamped 6..32); Blur presets: 6 / 12 / 18 (clamped 4..24)
+    // Censor Mosaic presets: 8 / 14 (clamped 6..32); Blur presets: 6 / 12 (clamped 4..24)
     tc.SetActiveTool(ToolType::Censor);
     tc.SetCensorMode(CensorMode::Mosaic);
     tc.ApplySizePreset(0);
     SC_EXPECT_NEAR(tc.ActiveSize(), 8.0f, 1e-3);
+    tc.ApplySizePreset(1);
+    SC_EXPECT_NEAR(tc.ActiveSize(), 14.0f, 1e-3);
     tc.ApplySizePreset(2);
-    SC_EXPECT_NEAR(tc.ActiveSize(), 22.0f, 1e-3);
+    SC_EXPECT_NEAR(tc.ActiveSize(), 14.0f, 1e-3);
     tc.OnPointerDown({10.0f, 10.0f}, false);
     tc.OnPointerUp({80.0f, 60.0f}, false);
     SC_EXPECT_EQ(tc.Annotations().size(), static_cast<size_t>(1));
@@ -196,6 +206,108 @@ SC_TEST("Undo while active text editor has content commits and undoes cleanly") 
     SC_EXPECT_TRUE(tc.Redo());
     SC_EXPECT_EQ(tc.Annotations().size(), static_cast<size_t>(1));
     SC_EXPECT_TRUE(tc.Annotations()[0].text == L"@x");
+}
+
+SC_TEST("CancelActiveDrag clears preview without disturbing committed annotations") {
+    ToolController tc;
+    tc.SetActiveTool(ToolType::Rectangle);
+    tc.OnPointerDown({20.0f, 20.0f}, false);
+    tc.OnPointerMove({80.0f, 70.0f}, false);
+    tc.OnPointerUp({80.0f, 70.0f}, false);
+    SC_EXPECT_EQ(tc.Annotations().size(), static_cast<size_t>(1));
+
+    tc.OnPointerDown({100.0f, 100.0f}, false);
+    tc.OnPointerMove({180.0f, 160.0f}, false);
+    SC_EXPECT_TRUE(tc.ActivePreview() != nullptr);
+
+    tc.CancelActiveDrag();
+    SC_EXPECT_TRUE(tc.ActivePreview() == nullptr);
+    SC_EXPECT_EQ(tc.Annotations().size(), static_cast<size_t>(1));
+}
+
+SC_TEST("OverlayWindow commits sequential drawings across tools and handles capture loss cleanly") {
+    ComInitScope comScope;
+    SC_EXPECT_TRUE(comScope.Succeeded());
+
+    OverlayWindow overlay;
+    CapturedFrame frame = CreateSyntheticTestFrame(640, 480);
+    OverlayCallbacks cbs{};
+    SC_EXPECT_TRUE(overlay.CreateAndShow(::GetModuleHandleW(nullptr), std::move(frame), std::move(cbs), true));
+    HWND hwnd = overlay.Handle();
+    SC_EXPECT_TRUE(hwnd != nullptr);
+
+    auto sendMouse = [&](UINT msg, int x, int y) {
+        ::SendMessageW(hwnd, msg, 0, MAKELPARAM(x, y));
+    };
+
+    auto clickButton = [&](ToolbarButtonId id) {
+        for (const auto& btn : overlay.Layout().buttons) {
+            if (btn.id == id) {
+                const int bx = static_cast<int>(std::lround(0.5f * (btn.rect.left + btn.rect.right)));
+                const int by = static_cast<int>(std::lround(0.5f * (btn.rect.top + btn.rect.bottom)));
+                sendMouse(WM_LBUTTONDOWN, bx, by);
+                sendMouse(WM_LBUTTONUP, bx, by);
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // Tiny <8x8 drag must clear selection on WM_LBUTTONUP (regression check for ReleaseCapture order).
+    sendMouse(WM_LBUTTONDOWN, 100, 100);
+    sendMouse(WM_MOUSEMOVE, 103, 103);
+    sendMouse(WM_LBUTTONUP, 103, 103);
+    SC_EXPECT_FALSE(overlay.Selection().active);
+
+    // Valid selection (50, 50) -> (450, 350).
+    sendMouse(WM_LBUTTONDOWN, 50, 50);
+    sendMouse(WM_MOUSEMOVE, 450, 350);
+    sendMouse(WM_LBUTTONUP, 450, 350);
+    SC_EXPECT_TRUE(overlay.Selection().active);
+
+    // Draw two consecutive Pen strokes -> both must persist (Bug 3 regression check).
+    SC_EXPECT_TRUE(clickButton(ToolbarButtonId::ToolPen));
+    sendMouse(WM_LBUTTONDOWN, 100, 100);
+    sendMouse(WM_MOUSEMOVE, 150, 130);
+    sendMouse(WM_LBUTTONUP, 150, 130);
+    SC_EXPECT_EQ(overlay.Tools().Annotations().size(), static_cast<size_t>(1));
+    SC_EXPECT_TRUE(overlay.Tools().ActivePreview() == nullptr);
+
+    sendMouse(WM_LBUTTONDOWN, 180, 110);
+    sendMouse(WM_MOUSEMOVE, 240, 140);
+    sendMouse(WM_LBUTTONUP, 240, 140);
+    SC_EXPECT_EQ(overlay.Tools().Annotations().size(), static_cast<size_t>(2));
+    SC_EXPECT_TRUE(overlay.Tools().ActivePreview() == nullptr);
+
+    // Draw one shape with each remaining non-text drawing tool and confirm all persist.
+    const ToolbarButtonId otherTools[] = {
+        ToolbarButtonId::ToolLine,
+        ToolbarButtonId::ToolArrow,
+        ToolbarButtonId::ToolRect,
+        ToolbarButtonId::ToolHighlighter,
+        ToolbarButtonId::ToolCensor
+    };
+    int offsetY = 160;
+    for (ToolbarButtonId toolBtn : otherTools) {
+        SC_EXPECT_TRUE(clickButton(toolBtn));
+        sendMouse(WM_LBUTTONDOWN, 110, offsetY);
+        sendMouse(WM_MOUSEMOVE, 220, offsetY + 24);
+        sendMouse(WM_LBUTTONUP, 220, offsetY + 24);
+        offsetY += 30;
+    }
+    SC_EXPECT_EQ(overlay.Tools().Annotations().size(), static_cast<size_t>(7));
+    SC_EXPECT_TRUE(overlay.Tools().ActivePreview() == nullptr);
+
+    // Unexpected WM_CAPTURECHANGED mid-stroke discards only the active preview, keeping all 7 committed items.
+    SC_EXPECT_TRUE(clickButton(ToolbarButtonId::ToolPen));
+    sendMouse(WM_LBUTTONDOWN, 280, 160);
+    sendMouse(WM_MOUSEMOVE, 340, 200);
+    SC_EXPECT_TRUE(overlay.Tools().ActivePreview() != nullptr);
+    ::SendMessageW(hwnd, WM_CAPTURECHANGED, 0, 0);
+    SC_EXPECT_TRUE(overlay.Tools().ActivePreview() == nullptr);
+    SC_EXPECT_EQ(overlay.Tools().Annotations().size(), static_cast<size_t>(7));
+
+    overlay.DestroyAndRelease();
 }
 
 int main() {
