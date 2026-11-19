@@ -3,6 +3,7 @@
 #include "export/clipboard_export.hpp"
 #include "export/wic_exporter.hpp"
 #include "platform/dpi_monitor.hpp"
+#include "resource.h"
 
 #include <commdlg.h>
 #include <windowsx.h>
@@ -74,6 +75,20 @@ ATOM OverlayWindow::RegisterOverlayClass(HINSTANCE hInstance) {
     wc.style = CS_DBLCLKS;
     wc.lpfnWndProc = &OverlayWindow::StaticWndProc;
     wc.hInstance = hInstance;
+    wc.hIcon = static_cast<HICON>(::LoadImageW(
+        hInstance,
+        MAKEINTRESOURCEW(IDI_APP_ICON),
+        IMAGE_ICON,
+        ::GetSystemMetrics(SM_CXICON),
+        ::GetSystemMetrics(SM_CYICON),
+        LR_DEFAULTCOLOR | LR_SHARED));
+    wc.hIconSm = static_cast<HICON>(::LoadImageW(
+        hInstance,
+        MAKEINTRESOURCEW(IDI_APP_ICON),
+        IMAGE_ICON,
+        ::GetSystemMetrics(SM_CXSMICON),
+        ::GetSystemMetrics(SM_CYSMICON),
+        LR_DEFAULTCOLOR | LR_SHARED));
     wc.hCursor = ::LoadCursorW(nullptr, IDC_CROSS);
     wc.hbrBackground = nullptr;
     wc.lpszClassName = kOverlayClassName;

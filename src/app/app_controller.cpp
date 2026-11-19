@@ -26,6 +26,20 @@ int AppController::Run(HINSTANCE hInstance) {
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = &AppController::StaticWndProc;
     wc.hInstance = hInstance_;
+    wc.hIcon = static_cast<HICON>(::LoadImageW(
+        hInstance_,
+        MAKEINTRESOURCEW(IDI_APP_ICON),
+        IMAGE_ICON,
+        ::GetSystemMetrics(SM_CXICON),
+        ::GetSystemMetrics(SM_CYICON),
+        LR_DEFAULTCOLOR | LR_SHARED));
+    wc.hIconSm = static_cast<HICON>(::LoadImageW(
+        hInstance_,
+        MAKEINTRESOURCEW(IDI_APP_ICON),
+        IMAGE_ICON,
+        ::GetSystemMetrics(SM_CXSMICON),
+        ::GetSystemMetrics(SM_CYSMICON),
+        LR_DEFAULTCOLOR | LR_SHARED));
     wc.lpszClassName = kTrayClassName;
     if (::RegisterClassExW(&wc) == 0 && ::GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
         return 1;

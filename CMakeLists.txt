@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(SayCheese VERSION 1.1.0 LANGUAGES CXX)
+project(SayCheese VERSION 1.1.1 LANGUAGES CXX)
 
 if(NOT WIN32)
     message(FATAL_ERROR "SayCheese targets Windows 10/11 (x64).")
