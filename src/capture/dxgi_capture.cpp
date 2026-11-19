@@ -261,12 +261,16 @@ bool CaptureSingleOutput(
 
     const int desktopW = outputDesc.DesktopCoordinates.right - outputDesc.DesktopCoordinates.left;
     const int desktopH = outputDesc.DesktopCoordinates.bottom - outputDesc.DesktopCoordinates.top;
-    SurfaceRotation rotation = SurfaceRotation::Identity;
-    if (static_cast<int>(stagedDesc.Width) != desktopW || static_cast<int>(stagedDesc.Height) != desktopH) {
-        rotation = MapRotation(duplDesc.Rotation != DXGI_MODE_ROTATION_UNSPECIFIED
-                                   ? duplDesc.Rotation
-                                   : outputDesc.Rotation);
-    }
+    const SurfaceRotation reportedRot = MapRotation(
+        duplDesc.Rotation != DXGI_MODE_ROTATION_UNSPECIFIED
+            ? duplDesc.Rotation
+            : outputDesc.Rotation);
+    const SurfaceRotation rotation = ResolveCaptureRotation(
+        static_cast<int>(stagedDesc.Width),
+        static_cast<int>(stagedDesc.Height),
+        desktopW,
+        desktopH,
+        reportedRot);
 
     const float sdrWhite = (fmt == SurfaceFormat::RGBA16F)
         ? QueryMonitorSdrWhiteMultiplier(outputDesc.DeviceName)

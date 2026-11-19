@@ -101,34 +101,51 @@ RectF ApplySelectionDrag(
         return ClampRectToBounds(r, canvasBounds);
     }
 
+    auto clampLeft = [&](float candidate) noexcept {
+        const float maxLeft = std::max(canvasBounds.left, std::min(r.right, r.right - minSize));
+        return std::clamp(candidate, canvasBounds.left, maxLeft);
+    };
+    auto clampRight = [&](float candidate) noexcept {
+        const float minRight = std::min(canvasBounds.right, std::max(r.left, r.left + minSize));
+        return std::clamp(candidate, minRight, canvasBounds.right);
+    };
+    auto clampTop = [&](float candidate) noexcept {
+        const float maxTop = std::max(canvasBounds.top, std::min(r.bottom, r.bottom - minSize));
+        return std::clamp(candidate, canvasBounds.top, maxTop);
+    };
+    auto clampBottom = [&](float candidate) noexcept {
+        const float minBottom = std::min(canvasBounds.bottom, std::max(r.top, r.top + minSize));
+        return std::clamp(candidate, minBottom, canvasBounds.bottom);
+    };
+
     switch (handle) {
     case ResizeHandle::TopLeft:
-        r.left = std::clamp(r.left + delta.x, canvasBounds.left, r.right - minSize);
-        r.top = std::clamp(r.top + delta.y, canvasBounds.top, r.bottom - minSize);
+        r.left = clampLeft(r.left + delta.x);
+        r.top = clampTop(r.top + delta.y);
         break;
     case ResizeHandle::Top:
-        r.top = std::clamp(r.top + delta.y, canvasBounds.top, r.bottom - minSize);
+        r.top = clampTop(r.top + delta.y);
         break;
     case ResizeHandle::TopRight:
-        r.right = std::clamp(r.right + delta.x, r.left + minSize, canvasBounds.right);
-        r.top = std::clamp(r.top + delta.y, canvasBounds.top, r.bottom - minSize);
+        r.right = clampRight(r.right + delta.x);
+        r.top = clampTop(r.top + delta.y);
         break;
     case ResizeHandle::Right:
-        r.right = std::clamp(r.right + delta.x, r.left + minSize, canvasBounds.right);
+        r.right = clampRight(r.right + delta.x);
         break;
     case ResizeHandle::BottomRight:
-        r.right = std::clamp(r.right + delta.x, r.left + minSize, canvasBounds.right);
-        r.bottom = std::clamp(r.bottom + delta.y, r.top + minSize, canvasBounds.bottom);
+        r.right = clampRight(r.right + delta.x);
+        r.bottom = clampBottom(r.bottom + delta.y);
         break;
     case ResizeHandle::Bottom:
-        r.bottom = std::clamp(r.bottom + delta.y, r.top + minSize, canvasBounds.bottom);
+        r.bottom = clampBottom(r.bottom + delta.y);
         break;
     case ResizeHandle::BottomLeft:
-        r.left = std::clamp(r.left + delta.x, canvasBounds.left, r.right - minSize);
-        r.bottom = std::clamp(r.bottom + delta.y, r.top + minSize, canvasBounds.bottom);
+        r.left = clampLeft(r.left + delta.x);
+        r.bottom = clampBottom(r.bottom + delta.y);
         break;
     case ResizeHandle::Left:
-        r.left = std::clamp(r.left + delta.x, canvasBounds.left, r.right - minSize);
+        r.left = clampLeft(r.left + delta.x);
         break;
     case ResizeHandle::None:
     case ResizeHandle::MoveBody:

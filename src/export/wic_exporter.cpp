@@ -264,6 +264,24 @@ std::wstring BuildDefaultFilename() {
     return buf;
 }
 
+std::pair<std::wstring, ImageFileFormat> ResolveSavePathAndFormat(
+    const std::wstring& chosenPath,
+    DWORD filterIndex) {
+    ImageFileFormat fmt = (filterIndex == 2) ? ImageFileFormat::Jpeg : ImageFileFormat::Png;
+    std::wstring resolved = chosenPath;
+
+    const std::wstring lower = ToLowerCopy(resolved);
+    if (lower.ends_with(L".jpg") || lower.ends_with(L".jpeg")) {
+        fmt = ImageFileFormat::Jpeg;
+    } else if (lower.ends_with(L".png")) {
+        fmt = ImageFileFormat::Png;
+    } else if (!resolved.empty()) {
+        // Append extension matching active filter when user omitted an explicit extension.
+        resolved += (fmt == ImageFileFormat::Jpeg) ? L".jpg" : L".png";
+    }
+    return {std::move(resolved), fmt};
+}
+
 bool PromptAndSaveImage(
     HWND ownerHwnd,
     IWICImagingFactory* wicFactory,
@@ -289,22 +307,14 @@ bool PromptAndSaveImage(
     ofn.lpstrFile = fileBuf;
     ofn.nMaxFile = ARRAYSIZE(fileBuf);
     ofn.lpstrInitialDir = inOutLastDirectory.empty() ? nullptr : inOutLastDirectory.c_str();
-    ofn.lpstrDefExt = L"png";
+    ofn.lpstrDefExt = nullptr;
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_EXPLORER;
 
     if (!::GetSaveFileNameW(&ofn)) {
         return false;
     }
 
-    std::wstring chosenPath(fileBuf);
-    ImageFileFormat fmt = (ofn.nFilterIndex == 2) ? ImageFileFormat::Jpeg : ImageFileFormat::Png;
-
-    const std::wstring lower = ToLowerCopy(chosenPath);
-    if (lower.ends_with(L".jpg") || lower.ends_with(L".jpeg")) {
-        fmt = ImageFileFormat::Jpeg;
-    } else if (lower.ends_with(L".png")) {
-        fmt = ImageFileFormat::Png;
-    }
+    auto [chosenPath, fmt] = ResolveSavePathAndFormat(fileBuf, ofn.nFilterIndex);
 
     if (!SaveWicBitmapToFile(wicFactory, bitmap, chosenPath, fmt)) {
         return false;

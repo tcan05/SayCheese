@@ -253,6 +253,24 @@ SC_TEST("GaussianBlur and Mosaic censors visibly modify their exact non-zero-ori
     ctx.Reset();
 }
 
+SC_TEST("ResolveSavePathAndFormat appends matching extension for bare PNG/JPEG filenames") {
+    const auto pngBare = ResolveSavePathAndFormat(L"C:\\tmp\\shot", 1);
+    SC_EXPECT_TRUE(pngBare.first == L"C:\\tmp\\shot.png");
+    SC_EXPECT_EQ(static_cast<int>(pngBare.second), static_cast<int>(ImageFileFormat::Png));
+
+    const auto jpgBare = ResolveSavePathAndFormat(L"C:\\tmp\\shot", 2);
+    SC_EXPECT_TRUE(jpgBare.first == L"C:\\tmp\\shot.jpg");
+    SC_EXPECT_EQ(static_cast<int>(jpgBare.second), static_cast<int>(ImageFileFormat::Jpeg));
+
+    const auto explicitJpeg = ResolveSavePathAndFormat(L"C:\\tmp\\shot.jpeg", 1);
+    SC_EXPECT_TRUE(explicitJpeg.first == L"C:\\tmp\\shot.jpeg");
+    SC_EXPECT_EQ(static_cast<int>(explicitJpeg.second), static_cast<int>(ImageFileFormat::Jpeg));
+
+    const auto explicitPng = ResolveSavePathAndFormat(L"C:\\tmp\\shot.PNG", 2);
+    SC_EXPECT_TRUE(explicitPng.first == L"C:\\tmp\\shot.PNG");
+    SC_EXPECT_EQ(static_cast<int>(explicitPng.second), static_cast<int>(ImageFileFormat::Png));
+}
+
 int main() {
     return saycheese::test::RunAll("export");
 }

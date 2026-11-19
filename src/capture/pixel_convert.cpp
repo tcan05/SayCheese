@@ -114,6 +114,23 @@ float HalfToFloat(uint16_t h) noexcept {
     return out;
 }
 
+SurfaceRotation ResolveCaptureRotation(
+    int stagedWidth,
+    int stagedHeight,
+    int desktopWidth,
+    int desktopHeight,
+    SurfaceRotation reportedRotation) noexcept {
+    if (reportedRotation == SurfaceRotation::Rotate180) {
+        return SurfaceRotation::Rotate180;
+    }
+    if ((reportedRotation == SurfaceRotation::Rotate90 ||
+         reportedRotation == SurfaceRotation::Rotate270) &&
+        (stagedWidth != desktopWidth || stagedHeight != desktopHeight)) {
+        return reportedRotation;
+    }
+    return SurfaceRotation::Identity;
+}
+
 void BlitConvertedSurfaceToFrame(
     const uint8_t* srcData,
     int srcWidth,

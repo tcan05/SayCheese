@@ -170,6 +170,20 @@ SC_TEST("Negative-origin multi-monitor compositing places left and primary monit
     ExpectBgraAt(virtualFrame, 2, 0, 200, 150, 100, 255);
 }
 
+SC_TEST("ResolveCaptureRotation preserves Rotate180 even when staged dimensions match desktop dimensions") {
+    SC_EXPECT_EQ(static_cast<int>(ResolveCaptureRotation(1920, 1080, 1920, 1080, SurfaceRotation::Rotate180)),
+                 static_cast<int>(SurfaceRotation::Rotate180));
+    SC_EXPECT_EQ(static_cast<int>(ResolveCaptureRotation(1920, 1080, 1080, 1920, SurfaceRotation::Rotate90)),
+                 static_cast<int>(SurfaceRotation::Rotate90));
+    SC_EXPECT_EQ(static_cast<int>(ResolveCaptureRotation(1920, 1080, 1080, 1920, SurfaceRotation::Rotate270)),
+                 static_cast<int>(SurfaceRotation::Rotate270));
+    // Driver already pre-rotated portrait texture: dimensions match desktop -> Identity.
+    SC_EXPECT_EQ(static_cast<int>(ResolveCaptureRotation(1080, 1920, 1080, 1920, SurfaceRotation::Rotate90)),
+                 static_cast<int>(SurfaceRotation::Identity));
+    SC_EXPECT_EQ(static_cast<int>(ResolveCaptureRotation(1920, 1080, 1920, 1080, SurfaceRotation::Identity)),
+                 static_cast<int>(SurfaceRotation::Identity));
+}
+
 int main() {
     return saycheese::test::RunAll("capture_conversion");
 }

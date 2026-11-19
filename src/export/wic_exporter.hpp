@@ -49,6 +49,10 @@ bool SaveWicBitmapToFile(
 
 std::wstring BuildDefaultFilename();
 
+std::pair<std::wstring, ImageFileFormat> ResolveSavePathAndFormat(
+    const std::wstring& chosenPath,
+    DWORD filterIndex);
+
 bool PromptAndSaveImage(
     HWND ownerHwnd,
     IWICImagingFactory* wicFactory,

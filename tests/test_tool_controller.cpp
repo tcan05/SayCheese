@@ -174,6 +174,30 @@ SC_TEST("Censor mode toggle, wheel sizing clamps, presets, and Undo/Redo work co
     SC_EXPECT_EQ(tc.Annotations().size(), static_cast<size_t>(2));
 }
 
+SC_TEST("IsPureCtrlShortcut distinguishes Ctrl shortcuts from AltGr (Ctrl+Alt)") {
+    SC_EXPECT_TRUE(IsPureCtrlShortcut(true, false));
+    SC_EXPECT_FALSE(IsPureCtrlShortcut(true, true));   // AltGr sets both Ctrl and Alt
+    SC_EXPECT_FALSE(IsPureCtrlShortcut(false, false));
+    SC_EXPECT_FALSE(IsPureCtrlShortcut(false, true));
+}
+
+SC_TEST("Undo while active text editor has content commits and undoes cleanly") {
+    ToolController tc;
+    tc.SetActiveTool(ToolType::Text);
+    tc.OnPointerDown({100.0f, 100.0f}, false);
+    tc.OnTextChar(L'@'); // AltGr character on European keyboards
+    tc.OnTextChar(L'x');
+    SC_EXPECT_TRUE(tc.TextEditor().active);
+    SC_EXPECT_TRUE(tc.TextEditor().text == L"@x");
+    // Undo commits active text and immediately undoes it cleanly.
+    SC_EXPECT_TRUE(tc.Undo());
+    SC_EXPECT_FALSE(tc.TextEditor().active);
+    SC_EXPECT_EQ(tc.Annotations().size(), static_cast<size_t>(0));
+    SC_EXPECT_TRUE(tc.Redo());
+    SC_EXPECT_EQ(tc.Annotations().size(), static_cast<size_t>(1));
+    SC_EXPECT_TRUE(tc.Annotations()[0].text == L"@x");
+}
+
 int main() {
     return saycheese::test::RunAll("tool_controller");
 }

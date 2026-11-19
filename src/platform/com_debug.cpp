@@ -33,25 +33,31 @@ DxgiLiveObjectReport ReportDebugDxgiLiveObjects() {
     using DXGIGetDebugInterface1Fn = HRESULT(WINAPI*)(UINT, REFIID, void**);
     using DXGIGetDebugInterfaceFn = HRESULT(WINAPI*)(REFIID, void**);
 
+    struct ModuleRelease {
+        HMODULE mod = nullptr;
+        ModuleRelease() noexcept = default;
+        ModuleRelease(const ModuleRelease&) = delete;
+        ModuleRelease& operator=(const ModuleRelease&) = delete;
+        void Own(HMODULE m) noexcept { mod = m; }
+        ~ModuleRelease() noexcept {
+            if (mod != nullptr) {
+                ::FreeLibrary(mod);
+            }
+        }
+    };
+
+    // Declare module guards BEFORE ComPtrs so COM Release() always runs before FreeLibrary().
+    ModuleRelease dxgiGuard;
+    ModuleRelease dbgGuard;
     Microsoft::WRL::ComPtr<IDXGIDebug1> dxgiDebug;
     Microsoft::WRL::ComPtr<IDXGIInfoQueue> infoQueue;
 
     // DXGIGetDebugInterface1 is exported by dxgi.dll on Windows 8.1+.
     HMODULE dxgiMod = ::GetModuleHandleW(L"dxgi.dll");
-    bool loadedDxgi = false;
     if (dxgiMod == nullptr) {
         dxgiMod = ::LoadLibraryW(L"dxgi.dll");
-        loadedDxgi = (dxgiMod != nullptr);
+        dxgiGuard.Own(dxgiMod);
     }
-    struct ModuleRelease {
-        HMODULE mod = nullptr;
-        bool own = false;
-        ~ModuleRelease() noexcept {
-            if (own && mod != nullptr) {
-                ::FreeLibrary(mod);
-            }
-        }
-    } dxgiGuard{dxgiMod, loadedDxgi};
 
     if (dxgiMod != nullptr) {
         auto* getDebug1 = reinterpret_cast<DXGIGetDebugInterface1Fn>(
@@ -63,13 +69,11 @@ DxgiLiveObjectReport ReportDebugDxgiLiveObjects() {
     }
 
     // Fallback to dxgidebug.dll's DXGIGetDebugInterface if needed.
-    HMODULE dbgMod = nullptr;
-    bool loadedDbg = false;
     if (!dxgiDebug) {
-        dbgMod = ::GetModuleHandleW(L"dxgidebug.dll");
+        HMODULE dbgMod = ::GetModuleHandleW(L"dxgidebug.dll");
         if (dbgMod == nullptr) {
             dbgMod = ::LoadLibraryW(L"dxgidebug.dll");
-            loadedDbg = (dbgMod != nullptr);
+            dbgGuard.Own(dbgMod);
         }
         if (dbgMod != nullptr) {
             auto* getDebug = reinterpret_cast<DXGIGetDebugInterfaceFn>(
@@ -82,9 +86,9 @@ DxgiLiveObjectReport ReportDebugDxgiLiveObjects() {
             }
         }
     }
-    ModuleRelease dbgGuard{dbgMod, loadedDbg};
 
     if (!dxgiDebug) {
+        infoQueue.Reset();
         report.available = false;
         report.summary = "IDXGIDebug1 unavailable (Graphics Tools optional feature not installed)";
         return report;

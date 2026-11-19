@@ -75,6 +75,34 @@ SC_TEST("ApplySelectionDrag clamps move without shrinking and enforces minSize o
     SC_EXPECT_NEAR(shrunk.Width(), 8.0f, 1e-3);
 }
 
+SC_TEST("ApplySelectionDrag handles small edge-adjacent selections without invalid clamp bounds") {
+    const RectF bounds{0.0f, 0.0f, 1920.0f, 1080.0f};
+
+    // 5x5 selection pinned to top-left corner resized with minSize=8 must stay inside bounds without UB/crash.
+    const RectF tlSmall{0.0f, 0.0f, 5.0f, 5.0f};
+    const RectF rLeft = ApplySelectionDrag(tlSmall, ResizeHandle::Left, {-10.0f, 0.0f}, bounds, 8.0f);
+    SC_EXPECT_TRUE(rLeft.left >= bounds.left && rLeft.right <= bounds.right);
+    SC_EXPECT_TRUE(rLeft.left <= rLeft.right);
+
+    const RectF rTop = ApplySelectionDrag(tlSmall, ResizeHandle::Top, {0.0f, -10.0f}, bounds, 8.0f);
+    SC_EXPECT_TRUE(rTop.top >= bounds.top && rTop.bottom <= bounds.bottom);
+    SC_EXPECT_TRUE(rTop.top <= rTop.bottom);
+
+    const RectF rTl = ApplySelectionDrag(tlSmall, ResizeHandle::TopLeft, {20.0f, 20.0f}, bounds, 8.0f);
+    SC_EXPECT_TRUE(rTl.left >= bounds.left && rTl.top >= bounds.top && rTl.left <= rTl.right && rTl.top <= rTl.bottom);
+
+    // 5x5 selection pinned to bottom-right corner resized with minSize=8.
+    const RectF brSmall{1915.0f, 1075.0f, 1920.0f, 1080.0f};
+    const RectF rRight = ApplySelectionDrag(brSmall, ResizeHandle::Right, {10.0f, 0.0f}, bounds, 8.0f);
+    SC_EXPECT_TRUE(rRight.left >= bounds.left && rRight.right <= bounds.right && rRight.left <= rRight.right);
+
+    const RectF rBot = ApplySelectionDrag(brSmall, ResizeHandle::Bottom, {0.0f, 10.0f}, bounds, 8.0f);
+    SC_EXPECT_TRUE(rBot.top >= bounds.top && rBot.bottom <= bounds.bottom && rBot.top <= rBot.bottom);
+
+    const RectF rBr = ApplySelectionDrag(brSmall, ResizeHandle::BottomRight, {-20.0f, -20.0f}, bounds, 8.0f);
+    SC_EXPECT_TRUE(rBr.right <= bounds.right && rBr.bottom <= bounds.bottom && rBr.left <= rBr.right && rBr.top <= rBr.bottom);
+}
+
 SC_TEST("SnapLine45Deg snaps angles to nearest 45-degree increment") {
     const PointF horiz = SnapLine45Deg({0.0f, 0.0f}, {100.0f, 20.0f});
     SC_EXPECT_NEAR(horiz.y, 0.0f, 1e-3);

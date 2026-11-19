@@ -31,6 +31,10 @@ bool IsCtrlDown() noexcept {
     return (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
 }
 
+bool IsAltDown() noexcept {
+    return (::GetKeyState(VK_MENU) & 0x8000) != 0;
+}
+
 bool IsSpaceDown() noexcept {
     return (::GetKeyState(VK_SPACE) & 0x8000) != 0;
 }
@@ -615,8 +619,12 @@ LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
     case WM_LBUTTONDBLCLK: {
         const tools::PointF pt = PointFromLParam(lParam);
-        if (selection_.active && HitTestToolbar(layout_, pt) != ToolbarButtonId::None) {
-            return 0;
+        if (selection_.active) {
+            const ToolbarButtonId hitBtn = HitTestToolbar(layout_, pt);
+            if (hitBtn != ToolbarButtonId::None) {
+                HandleToolbarClick(hitBtn);
+                return 0;
+            }
         }
         if (toolController_.ActiveTool() == tools::ToolType::Select && !toolController_.TextEditor().active) {
             SelectMonitorAt(pt);
@@ -753,7 +761,7 @@ LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         if (dragMode_ == DragMode::CreatingSelection) {
             dragMode_ = DragMode::None;
             selection_.rect = selection_.rect.Normalized();
-            if (selection_.rect.Width() < 4.0f || selection_.rect.Height() < 4.0f) {
+            if (selection_.rect.Width() < 8.0f || selection_.rect.Height() < 8.0f) {
                 selection_.active = false;
                 selection_.rect = {};
             }
@@ -833,7 +841,7 @@ LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     }
 
     case WM_KEYDOWN: {
-        const bool ctrl = IsCtrlDown();
+        const bool pureCtrl = tools::IsPureCtrlShortcut(IsCtrlDown(), IsAltDown());
         if (wParam == VK_ESCAPE) {
             const tools::EscapeAction action = toolController_.HandleEscape();
             if (action == tools::EscapeAction::CloseOverlay) {
@@ -845,14 +853,16 @@ LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             return 0;
         }
 
-        if (ctrl && !toolController_.TextEditor().active) {
+        if (pureCtrl) {
             if (wParam == 'Z') {
                 toolController_.Undo();
+                StopCaretTimer();
                 RenderFrame();
                 return 0;
             }
             if (wParam == 'Y') {
                 toolController_.Redo();
+                StopCaretTimer();
                 RenderFrame();
                 return 0;
             }
@@ -864,17 +874,8 @@ LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 PerformSave();
                 return 0;
             }
-            if (wParam == 'A') {
+            if (wParam == 'A' && !toolController_.TextEditor().active) {
                 SelectFullVirtualScreen();
-                return 0;
-            }
-        } else if (ctrl && toolController_.TextEditor().active) {
-            if (wParam == 'C') {
-                PerformCopy();
-                return 0;
-            }
-            if (wParam == 'S') {
-                PerformSave();
                 return 0;
             }
         }
@@ -914,7 +915,9 @@ LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     }
 
     case WM_CHAR:
-        if (toolController_.TextEditor().active && !IsCtrlDown()) {
+        // Do NOT filter by IsCtrlDown() here: AltGr on European/international keyboards sets
+        // both VK_CONTROL and VK_MENU. Control codes (Ctrl+A..Z) are already excluded by ch >= 0x20.
+        if (toolController_.TextEditor().active) {
             const wchar_t ch = static_cast<wchar_t>(wParam);
             if (ch >= 0x20 && ch != 0x7F) {
                 toolController_.OnTextChar(ch);

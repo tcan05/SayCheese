@@ -22,6 +22,13 @@ enum class SurfaceRotation {
 
 float HalfToFloat(uint16_t h) noexcept;
 
+SurfaceRotation ResolveCaptureRotation(
+    int stagedWidth,
+    int stagedHeight,
+    int desktopWidth,
+    int desktopHeight,
+    SurfaceRotation reportedRotation) noexcept;
+
 void BlitConvertedSurfaceToFrame(
     const uint8_t* srcData,
     int srcWidth,

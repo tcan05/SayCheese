@@ -25,6 +25,10 @@ enum class EscapeAction {
     CloseOverlay
 };
 
+constexpr bool IsPureCtrlShortcut(bool ctrlDown, bool altDown) noexcept {
+    return ctrlDown && !altDown;
+}
+
 class ToolController {
 public:
     const std::vector<Annotation>& Annotations() const noexcept { return annotations_; }

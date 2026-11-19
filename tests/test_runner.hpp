@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <crtdbg.h>
 #include <exception>
 #include <functional>
 #include <iostream>
@@ -38,6 +39,12 @@ inline void Fail(const char* file, int line, const std::string& msg) {
 }
 
 inline int RunAll(const char* suiteName) {
+#ifdef _DEBUG
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+#endif
     int passed = 0;
     int failed = 0;
     std::cout << "=== Running suite: " << suiteName << " (" << Registry().size() << " tests) ===" << std::endl;
